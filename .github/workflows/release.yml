@@ -36,6 +36,8 @@ jobs:
 
       - name: Package and Push to GHCR
         run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
           find . -type f -name "Chart.yaml" -not -path '*/\.*' | while read chart_yaml; do
             chart_dir=$(dirname "$chart_yaml")
             echo "==== Processing $chart_dir ===="
@@ -46,7 +48,7 @@ jobs:
             echo "Packaged to: $pkg_file"
 
             if [ -f "$pkg_file" ]; then
-              helm push "$pkg_file" oci://ghcr.io/${{ github.repository_owner }}/charts
+              helm push "$pkg_file" oci://ghcr.io/$REPO_OWNER/charts
               echo "Successfully pushed $pkg_file to GHCR!"
             else
               echo "Error: Package file not found!"
