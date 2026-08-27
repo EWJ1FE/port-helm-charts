@@ -39,21 +39,21 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Login to GHCR
-        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2.2.0
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${ GITHUB_REPOSITORY_OWNER }
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Configure Helm Repositories
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
-    
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
           skip_existing: true
-          mark_as_latest: ${{ inputs.mark_as_latest }}
+          mark_as_latest: ${{ inputs.mark_as_latest || 'true' }}
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
@@ -64,5 +64,5 @@ jobs:
             if [ -z "${pkg:-}" ]; then
               break
             fi
-            helm push "${pkg}" oci://ghcr.io/${GITHUB_REPOSITORY_OWNER}/charts
-          done       
+            helm push "${pkg}" oci://ghcr.io/${{ github.repository_owner }}/charts
+          done
