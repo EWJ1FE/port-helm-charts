@@ -1,68 +1,55 @@
-name: Release Charts
+name: Release Charts to GHCR
 
 on:
-  workflow_call:
-    inputs:
-      mark_as_latest:
-        type: boolean
-        required: false
-        default: true
   workflow_dispatch:
-    inputs:
-      mark_as_latest:
-        type: boolean
-        required: false
-        default: true
   push:
     branches:
       - main
+    paths:
+      - 'charts/**'
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
-  release:
+  release-oci:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
       - name: Install Helm
-        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
+        uses: azure/setup-helm@v3
 
-      - name: Configure Git
+      - name: Configure Helm Repositories (Dependencies)
         run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
 
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure Helm Repositories
+      - name: Package and Push to GHCR
         run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
+          find . -type f -name "Chart.yaml" -not -path '*/\.*' | while read chart_yaml; do
+            chart_dir=$(dirname "$chart_yaml")
+            echo "==== Processing $chart_dir ===="
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        with:
-          skip_existing: false
-          mark_as_latest: ${{ inputs.mark_as_latest || 'true' }}
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+            helm dependency update "$chart_dir"
 
-      - name: Push chart to GHCR
-        run: |
-          shopt -s nullglob
-          for pkg in .cr-release-packages/*; do
-            if [ -z "${pkg:-}" ]; then
-              break
+            pkg_file=$(helm package "$chart_dir" | awk '{print $NF}')
+            echo "Packaged to: $pkg_file"
+
+            if [ -f "$pkg_file" ]; then
+              helm push "$pkg_file" oci://ghcr.io/${{ github.repository_owner }}/charts
+              echo "Successfully pushed $pkg_file to GHCR!"
+            else
+              echo "Error: Package file not found!"
+              exit 1
             fi
-            helm push "${pkg}" oci://ghcr.io/${{ github.repository_owner }}/charts
           done
